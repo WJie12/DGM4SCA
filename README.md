@@ -1,7 +1,7 @@
 This repo is mainly inspired by [scvi](https://github.com/YosefLab/scVI)
 # To run
 
-annotation.py
+annotationtest.py
 
 # Structure
 

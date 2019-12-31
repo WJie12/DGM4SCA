@@ -24,7 +24,7 @@ from torch.utils.data.sampler import (
     RandomSampler,
 )
 
-from scvi.dataset import GeneExpressionDataset
+from dgm4sca.dataset.dataset import GeneExpressionDataset
 # from dgm4sca.inference.posterior_utils import (
 # #     entropy_batch_mixing,
 # #     plot_imputation,

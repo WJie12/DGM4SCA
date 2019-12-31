@@ -13,7 +13,7 @@ from sklearn.model_selection._split import _validate_shuffle_split
 from torch.utils.data.sampler import SubsetRandomSampler
 from tqdm.auto import tqdm
 
-from scvi.inference.posterior import Posterior
+from dgm4sca.inference.posterior import Posterior
 
 logger = logging.getLogger(__name__)
 

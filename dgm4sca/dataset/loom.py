@@ -5,7 +5,7 @@ from typing import List, Optional
 import loompy
 import numpy as np
 
-from scvi.dataset.dataset import DownloadableDataset
+from dgm4sca.dataset.dataset import DownloadableDataset
 
 logger = logging.getLogger(__name__)
 

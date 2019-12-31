@@ -12,10 +12,10 @@ from sklearn.svm import SVC
 import torch
 from torch.nn import functional as F
 
-from scvi.inference import Posterior
-from scvi.inference import Trainer
-from scvi.inference.inference import UnsupervisedTrainer
-from scvi.inference.posterior import unsupervised_clustering_accuracy
+from dgm4sca.inference.posterior import Posterior
+from dgm4sca.inference.trainer import Trainer
+from dgm4sca.inference.inference import UnsupervisedTrainer
+from dgm4sca.inference.posterior import unsupervised_clustering_accuracy
 
 logger = logging.getLogger(__name__)
 

@@ -6,9 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, Poisson, kl_divergence as kl
 
-from scvi.models.log_likelihood import log_zinb_positive, log_nb_positive
-from scvi.models.modules import Encoder, DecoderSCVI, LinearDecoderSCVI
-from scvi.models.utils import one_hot
+from dgm4sca.models.log_likelihood import log_zinb_positive, log_nb_positive
+from dgm4sca.models.modules import Encoder, DecoderSCVI
+from dgm4sca.models.utils import one_hot
 
 torch.backends.cudnn.benchmark = True
 
