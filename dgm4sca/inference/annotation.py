@@ -183,7 +183,7 @@ class ClassifierTrainer(Trainer):
         )
 
 
-class SemiSupervisedTrainer(UnsupervisedTrainer):
+class SemiSupervisedTrainer(Trainer):
     r"""The SemiSupervisedTrainer class for the semi-supervised training of an autoencoder.
     This parent class can be inherited to specify the different training schemes for semi-supervised learning
     """
@@ -197,12 +197,45 @@ class SemiSupervisedTrainer(UnsupervisedTrainer):
         lr_classification=5 * 1e-3,
         classification_ratio=50,
         seed=0,
+
+        train_size=0.8,
+        test_size=None,
+        n_epochs_kl_warmup=400,
+        normalize_loss=None,
+
         **kwargs
     ):
         """
         :param n_labelled_samples_per_class: number of labelled samples per class
         """
         super().__init__(model, gene_dataset, **kwargs)
+        self.n_epochs_kl_warmup = n_epochs_kl_warmup
+
+        self.normalize_loss = (
+            not (
+                hasattr(self.model, "reconstruction_loss")
+                and self.model.reconstruction_loss == "autozinb"
+            )
+            if normalize_loss is None
+            else normalize_loss
+        )
+
+        # Total size of the dataset used for training
+        # (e.g. training set in this class but testing set in AdapterTrainer).
+        # It used to rescale minibatch losses (cf. eq. (8) in Kingma et al., Auto-Encoding Variational Bayes, iCLR 2013)
+        self.n_samples = 1.0
+
+        if type(self) is UnsupervisedTrainer:
+            (
+                self.train_set,
+                self.test_set,
+                self.validation_set,
+            ) = self.train_test_validation(model, gene_dataset, train_size, test_size)
+            self.train_set.to_monitor = ["elbo"]
+            self.test_set.to_monitor = ["elbo"]
+            self.validation_set.to_monitor = ["elbo"]
+            self.n_samples = len(self.train_set.indices)
+
         self.model = model
         self.gene_dataset = gene_dataset
 
@@ -245,6 +278,12 @@ class SemiSupervisedTrainer(UnsupervisedTrainer):
         for posterior in [self.labelled_set, self.unlabelled_set]:
             posterior.to_monitor = ["reconstruction_error", "accuracy"]
 
+    def on_epoch_begin(self):
+        if self.n_epochs_kl_warmup is not None:
+            self.kl_weight = min(1, self.epoch / self.n_epochs_kl_warmup)
+        else:
+            self.kl_weight = 1.0
+
     @property
     def posteriors_loop(self):
         return ["full_dataset", "labelled_set"]
@@ -255,7 +294,20 @@ class SemiSupervisedTrainer(UnsupervisedTrainer):
         super().__setattr__(key, value)
 
     def loss(self, tensors_all, tensors_labelled):
-        loss = super().loss(tensors_all)
+
+        sample_batch, local_l_mean, local_l_var, batch_index, y = tensors_all
+        reconst_loss, kl_divergence_local, kl_divergence_global = self.model(
+            sample_batch, local_l_mean, local_l_var, batch_index, y
+        )
+        loss = (
+            self.n_samples
+            * torch.mean(reconst_loss + self.kl_weight * kl_divergence_local)
+            + kl_divergence_global
+        )
+        if self.normalize_loss:
+            loss = loss / self.n_samples
+
+        # loss = super().loss(tensors_all)
         sample_batch, _, _, _, y = tensors_labelled
         classification_loss = F.cross_entropy(
             self.model.classify(sample_batch), y.view(-1)
