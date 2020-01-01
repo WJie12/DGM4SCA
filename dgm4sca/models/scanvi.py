@@ -1,5 +1,19 @@
 from typing import Sequence
+import torch
+import torch.nn as nn
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.distributions import Normal, Poisson, kl_divergence as kl
 
+from dgm4sca.models.log_likelihood import log_zinb_positive, log_nb_positive
+from dgm4sca.models.modules import Encoder, DecoderSCVI
+from dgm4sca.models.utils import one_hot
+
+from dgm4sca.models.modules import Encoder, DecoderSCVI
+
+
+torch.backends.cudnn.benchmark = True
 import numpy as np
 import torch
 from torch.distributions import Normal, Categorical, kl_divergence as kl
@@ -7,10 +21,10 @@ from torch.distributions import Normal, Categorical, kl_divergence as kl
 from dgm4sca.models.classifier import Classifier
 from dgm4sca.models.modules import Decoder, Encoder
 from dgm4sca.models.utils import broadcast_labels
-from dgm4sca.models.vae import VAE
 
 
-class SCANVI(VAE):
+
+class SCANVI(nn.Module):
     r"""A semi-supervised Variational auto-encoder model - inspired from M1 + M2 model,
     as described in (https://arxiv.org/pdf/1406.5298.pdf). SCANVI stands for single-cell annotation using
     variational inference.
@@ -66,17 +80,65 @@ class SCANVI(VAE):
         use_labels_groups: bool = False,
         classifier_parameters: dict = dict(),
     ):
-        super().__init__(
+        super().__init__()
+
+        self.dispersion = dispersion
+        self.n_latent = n_latent
+        self.log_variational = log_variational
+        self.reconstruction_loss = reconstruction_loss
+        # Automatically deactivate if useless
+        self.n_batch = n_batch
+        self.n_labels = n_labels
+
+        if self.dispersion == "gene":
+            self.px_r = torch.nn.Parameter(torch.randn(n_input))
+        elif self.dispersion == "gene-batch":
+            self.px_r = torch.nn.Parameter(torch.randn(n_input, n_batch))
+        elif self.dispersion == "gene-label":
+            self.px_r = torch.nn.Parameter(torch.randn(n_input, n_labels))
+        elif self.dispersion == "gene-cell":
+            pass
+        else:
+            raise ValueError(
+                "dispersion must be one of ['gene', 'gene-batch',"
+                " 'gene-label', 'gene-cell'], but input was "
+                "{}.format(self.dispersion)"
+            )
+
+        # z encoder goes from the n_input-dimensional data to an n_latent-d
+        # latent space representation
+        self.z_encoder = Encoder(
             n_input,
-            n_hidden=n_hidden,
-            n_latent=n_latent,
+            n_latent,
             n_layers=n_layers,
+            n_hidden=n_hidden,
             dropout_rate=dropout_rate,
-            n_batch=n_batch,
-            dispersion=dispersion,
-            log_variational=log_variational,
-            reconstruction_loss=reconstruction_loss,
         )
+        # l encoder goes from n_input-dimensional data to 1-d library size
+        self.l_encoder = Encoder(
+            n_input, 1, n_layers=1, n_hidden=n_hidden, dropout_rate=dropout_rate
+        )
+        # decoder goes from n_latent-dimensional space to n_input-d data
+        self.decoder = DecoderSCVI(
+            n_latent,
+            n_input,
+            n_cat_list=[n_batch],
+            n_layers=n_layers,
+            n_hidden=n_hidden,
+        )
+
+    #     super().__init__(
+    #         n_input,
+    #         n_hidden=n_hidden,
+    #         n_latent=n_latent,
+    #         n_layers=n_layers,
+    #         dropout_rate=dropout_rate,
+    #         n_batch=n_batch,
+    #         dispersion=dispersion,
+    #         log_variational=log_variational,
+    #         reconstruction_loss=reconstruction_loss,
+    #     )
+
 
         self.n_labels = n_labels
         # Classifier takes n_latent as input
@@ -155,7 +217,7 @@ class SCANVI(VAE):
         return w_y
 
     def get_latents(self, x, y=None):
-        zs = super().get_latents(x)
+        zs = self.get_latents_vae(x)
         qz2_m, qz2_v, z2 = self.encoder_z2_z1(zs[0], y)
         if not self.training:
             z2 = qz2_m
@@ -217,3 +279,89 @@ class SCANVI(VAE):
         kl_divergence += kl_divergence_l
 
         return reconst_loss, kl_divergence, 0.0
+################### ADD FROM VAE.PY
+    def get_latents_vae(self, x, y=None):
+        r""" returns the result of ``sample_from_posterior_z`` inside a list
+
+        :param x: tensor of values with shape ``(batch_size, n_input)``
+        :param y: tensor of cell-types labels with shape ``(batch_size, n_labels)``
+        :return: one element list of tensor
+        :rtype: list of :py:class:`torch.Tensor`
+        """
+        return [self.sample_from_posterior_z(x, y)]
+
+    def sample_from_posterior_z(self, x, y=None, give_mean=False):
+        r""" samples the tensor of latent values from the posterior
+        #doesn't really sample, returns the means of the posterior distribution
+
+        :param x: tensor of values with shape ``(batch_size, n_input)``
+        :param y: tensor of cell-types labels with shape ``(batch_size, n_labels)``
+        :param give_mean: is True when we want the mean of the posterior  distribution rather than sampling
+        :return: tensor of shape ``(batch_size, n_latent)``
+        :rtype: :py:class:`torch.Tensor`
+            """
+        if self.log_variational:
+            x = torch.log(1 + x)
+        qz_m, qz_v, z = self.z_encoder(x, y)  # y only used in VAEC
+        if give_mean:
+            z = qz_m
+        return z
+
+    def inference(self, x, batch_index=None, y=None, n_samples=1, transform_batch=None):
+
+        x_ = x
+        if self.log_variational:
+            x_ = torch.log(1 + x_)
+
+        # Sampling
+        qz_m, qz_v, z = self.z_encoder(x_, y)
+        ql_m, ql_v, library = self.l_encoder(x_)
+
+        if n_samples > 1:
+            qz_m = qz_m.unsqueeze(0).expand((n_samples, qz_m.size(0), qz_m.size(1)))
+            qz_v = qz_v.unsqueeze(0).expand((n_samples, qz_v.size(0), qz_v.size(1)))
+            z = Normal(qz_m, qz_v.sqrt()).sample()
+            ql_m = ql_m.unsqueeze(0).expand((n_samples, ql_m.size(0), ql_m.size(1)))
+            ql_v = ql_v.unsqueeze(0).expand((n_samples, ql_v.size(0), ql_v.size(1)))
+            library = Normal(ql_m, ql_v.sqrt()).sample()
+
+        if transform_batch is not None:
+            dec_batch_index = transform_batch * torch.ones_like(batch_index)
+        else:
+            dec_batch_index = batch_index
+
+        px_scale, px_r, px_rate, px_dropout = self.decoder(
+            self.dispersion, z, library, dec_batch_index, y
+        )
+        if self.dispersion == "gene-label":
+            px_r = F.linear(
+                one_hot(y, self.n_labels), self.px_r
+            )  # px_r gets transposed - last dimension is nb genes
+        elif self.dispersion == "gene-batch":
+            px_r = F.linear(one_hot(dec_batch_index, self.n_batch), self.px_r)
+        elif self.dispersion == "gene":
+            px_r = self.px_r
+        px_r = torch.exp(px_r)
+
+        return dict(
+            px_scale=px_scale,
+            px_r=px_r,
+            px_rate=px_rate,
+            px_dropout=px_dropout,
+            qz_m=qz_m,
+            qz_v=qz_v,
+            z=z,
+            ql_m=ql_m,
+            ql_v=ql_v,
+            library=library,
+        )
+
+    def get_reconstruction_loss(self, x, px_rate, px_r, px_dropout, **kwargs):
+        # Reconstruction Loss
+        if self.reconstruction_loss == "zinb":
+            reconst_loss = -log_zinb_positive(x, px_rate, px_r, px_dropout).sum(dim=-1)
+        elif self.reconstruction_loss == "nb":
+            reconst_loss = -log_nb_positive(x, px_rate, px_r).sum(dim=-1)
+        elif self.reconstruction_loss == "poisson":
+            reconst_loss = -Poisson(px_rate).log_prob(x).sum(dim=-1)
+        return reconst_loss
