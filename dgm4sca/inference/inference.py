@@ -95,11 +95,6 @@ class UnsupervisedTrainer(Trainer):
             loss = loss / self.n_samples
         return loss
 
-    def on_epoch_begin(self):
-        if self.n_epochs_kl_warmup is not None:
-            self.kl_weight = min(1, self.epoch / self.n_epochs_kl_warmup)
-        else:
-            self.kl_weight = 1.0
 
 
 # class AdapterTrainer(UnsupervisedTrainer):

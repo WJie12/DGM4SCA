@@ -182,8 +182,8 @@ class ClassifierTrainer(Trainer):
             model, full_set, classifier=cls, soft=soft, model_zl=self.sampling_zl
         )
 
-
-class SemiSupervisedTrainer(Trainer):
+class JointSemiSupervisedTrainer(Trainer):
+# class SemiSupervisedTrainer(Trainer):
     r"""The SemiSupervisedTrainer class for the semi-supervised training of an autoencoder.
     This parent class can be inherited to specify the different training schemes for semi-supervised learning
     """
@@ -193,7 +193,8 @@ class SemiSupervisedTrainer(Trainer):
         model,
         gene_dataset,
         n_labelled_samples_per_class=50,
-        n_epochs_classifier=1,
+        # n_epochs_classifier=1,
+        n_epochs_classifier=0,
         lr_classification=5 * 1e-3,
         classification_ratio=50,
         seed=0,
@@ -335,23 +336,11 @@ class SemiSupervisedTrainer(Trainer):
             model, gene_dataset, shuffle, indices, type_class
         )
 
-
-class JointSemiSupervisedTrainer(SemiSupervisedTrainer):
-    def __init__(self, model, gene_dataset, **kwargs):
-        kwargs.update({"n_epochs_classifier": 0})
-        super().__init__(model, gene_dataset, **kwargs)
-
-
-class AlternateSemiSupervisedTrainer(SemiSupervisedTrainer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def loss(self, all_tensor):
-        return UnsupervisedTrainer.loss(self, all_tensor)
-
-    @property
-    def posteriors_loop(self):
-        return ["full_dataset"]
+#
+# class JointSemiSupervisedTrainer(SemiSupervisedTrainer):
+#     def __init__(self, model, gene_dataset, **kwargs):
+#         kwargs.update({"n_epochs_classifier": 0})
+#         super().__init__(model, gene_dataset, **kwargs)
 
 
 @torch.no_grad()
