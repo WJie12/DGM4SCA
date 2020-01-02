@@ -35,10 +35,10 @@ from dgm4sca.dataset.dataset import GeneExpressionDataset
 # #     describe_continuous_distrib,
 # #     save_cluster_xlsx,
 # # )
-# # from dgm4sca.models.log_likelihood import (
-# #     compute_elbo,
-# #     compute_reconstruction_error,
-# )
+from dgm4sca.models.log_likelihood import (
+    compute_elbo,
+    compute_reconstruction_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -208,11 +208,11 @@ class Posterior:
     #
     # elbo.mode = "min"
     #
-    # @torch.no_grad()
-    # def reconstruction_error(self):
-    #     reconstruction_error = compute_reconstruction_error(self.model, self)
-    #     logger.debug("Reconstruction Error : %.4f" % reconstruction_error)
-    #     return reconstruction_error
+    @torch.no_grad()
+    def reconstruction_error(self):
+        reconstruction_error = compute_reconstruction_error(self.model, self)
+        logger.debug("Reconstruction Error : %.4f" % reconstruction_error)
+        return reconstruction_error
     #
     # reconstruction_error.mode = "min"
     #
