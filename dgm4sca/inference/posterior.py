@@ -7,6 +7,7 @@ from typing import List, Optional, Union, Tuple, Callable
 from scipy.optimize import linear_sum_assignment
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import KNeighborsClassifier
 import torch
 # import torch.distributions as distributions
 # from tqdm.auto import tqdm
@@ -122,6 +123,7 @@ class Posterior:
         use_cuda=True,
         data_loader_kwargs=dict(),
     ):
+        self.model_zl = False
         """
 
         When added to annotation, has a private name attribute
@@ -213,8 +215,8 @@ class Posterior:
         reconstruction_error = compute_reconstruction_error(self.model, self)
         logger.debug("Reconstruction Error : %.4f" % reconstruction_error)
         return reconstruction_error
-    #
-    # reconstruction_error.mode = "min"
+
+    reconstruction_error.mode = "min"
     #
     # @torch.no_grad()
     # def marginal_ll(self, n_mc_samples=1000):
@@ -1419,6 +1421,7 @@ class Posterior:
     #         latent = TSNE().fit_transform(latent[idx_t_sne])
     #     return latent, idx_t_sne
     #
+
     def raw_data(self):
         """
         Returns raw data for classification
@@ -1427,5 +1430,109 @@ class Posterior:
             self.gene_dataset.X[self.indices],
             self.gene_dataset.labels[self.indices].ravel(),
         )
+
+    def accuracy(self):
+        model, cls = (
+            (self.sampling_model, self.model)
+            if hasattr(self, "sampling_model")
+            else (self.model, None)
+        )
+        acc = compute_accuracy(model, self, classifier=cls, model_zl=self.model_zl)
+        logger.debug("Acc: %.4f" % (acc))
+        return acc
+
+    accuracy.mode = "max"
+
+    @torch.no_grad()
+    def hierarchical_accuracy(self):
+        all_y, all_y_pred = self.compute_predictions()
+        acc = np.mean(all_y == all_y_pred)
+
+        all_y_groups = np.array([self.model.labels_groups[y] for y in all_y])
+        all_y_pred_groups = np.array([self.model.labels_groups[y] for y in all_y_pred])
+        h_acc = np.mean(all_y_groups == all_y_pred_groups)
+
+        logger.debug("Hierarchical Acc : %.4f\n" % h_acc)
+        return acc
+
+    accuracy.mode = "max"
+
+    @torch.no_grad()
+    def compute_predictions(self, soft=False):
+        """
+        :return: the true labels and the predicted labels
+        :rtype: 2-tuple of :py:class:`numpy.int32`
+        """
+        model, cls = (
+            (self.sampling_model, self.model)
+            if hasattr(self, "sampling_model")
+            else (self.model, None)
+        )
+        return compute_predictions(
+            model, self, classifier=cls, soft=soft, model_zl=self.model_zl
+        )
+
+    @torch.no_grad()
+    def unsupervised_classification_accuracy(self):
+        all_y, all_y_pred = self.compute_predictions()
+        uca = unsupervised_clustering_accuracy(all_y, all_y_pred)[0]
+        logger.debug("UCA : %.4f" % (uca))
+        return uca
+
+    unsupervised_classification_accuracy.mode = "max"
+
+    @torch.no_grad()
+    def nn_latentspace(self, posterior):
+        data_train, _, labels_train = self.get_latent()
+        data_test, _, labels_test = posterior.get_latent()
+        nn = KNeighborsClassifier()
+        nn.fit(data_train, labels_train)
+        score = nn.score(data_test, labels_test)
+        return score
+
+@torch.no_grad()
+def compute_predictions(
+    model, data_loader, classifier=None, soft=False, model_zl=False
+):
+    all_y_pred = []
+    all_y = []
+    for i_batch, tensors in enumerate(data_loader):
+        sample_batch, _, _, _, labels = tensors
+        all_y += [labels.view(-1).cpu()]
+
+        if hasattr(model, "classify"):
+            y_pred = model.classify(sample_batch)
+        elif classifier is not None:
+            # Then we use the specified classifier
+            if model is not None:
+                if model.log_variational:
+                    sample_batch = torch.log(1 + sample_batch)
+                if model_zl:
+                    sample_z = model.z_encoder(sample_batch)[0]
+                    sample_l = model.l_encoder(sample_batch)[0]
+                    sample_batch = torch.cat((sample_z, sample_l), dim=-1)
+                else:
+                    sample_batch, _, _ = model.z_encoder(sample_batch)
+            y_pred = classifier(sample_batch)
+        else:  # The model is the raw classifier
+            y_pred = model(sample_batch)
+
+        if not soft:
+            y_pred = y_pred.argmax(dim=-1)
+
+        all_y_pred += [y_pred.cpu()]
+
+    all_y_pred = np.array(torch.cat(all_y_pred))
+    all_y = np.array(torch.cat(all_y))
+
+    return all_y, all_y_pred
+
+@torch.no_grad()
+def compute_accuracy(vae, data_loader, classifier=None, model_zl=False):
+    all_y, all_y_pred = compute_predictions(
+        vae, data_loader, classifier=classifier, model_zl=model_zl
+    )
+    return np.mean(all_y == all_y_pred)
+
 
 

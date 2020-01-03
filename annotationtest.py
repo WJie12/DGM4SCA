@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 """data loading"""
-gene_dataset = LoomDataset(filename='simulation_3.loom', save_path="./data")
-# gene_dataset = LoomDataset(filename='data_loom.loom', save_path="./data")
+# gene_dataset = LoomDataset(filename='simulation_3.loom', save_path="./data")
+gene_dataset = LoomDataset(filename='data_loom.loom', save_path="./data")
 print(gene_dataset.labels)
 print(gene_dataset)
 
 use_batches = False
 use_cuda = True
-n_epochs = 20
+n_epochs = 50
 n_cl = 10
 scanvi = SCANVI(gene_dataset.nb_genes, gene_dataset.n_batches, gene_dataset.n_labels)
 trainer = JointSemiSupervisedTrainer(scanvi, gene_dataset,

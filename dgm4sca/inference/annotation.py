@@ -20,71 +20,6 @@ from dgm4sca.inference.posterior import unsupervised_clustering_accuracy
 logger = logging.getLogger(__name__)
 
 
-class AnnotationPosterior(Posterior):
-    def __init__(self, *args, model_zl=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.model_zl = model_zl
-
-    def accuracy(self):
-        model, cls = (
-            (self.sampling_model, self.model)
-            if hasattr(self, "sampling_model")
-            else (self.model, None)
-        )
-        acc = compute_accuracy(model, self, classifier=cls, model_zl=self.model_zl)
-        logger.debug("Acc: %.4f" % (acc))
-        return acc
-
-    accuracy.mode = "max"
-
-    @torch.no_grad()
-    def hierarchical_accuracy(self):
-        all_y, all_y_pred = self.compute_predictions()
-        acc = np.mean(all_y == all_y_pred)
-
-        all_y_groups = np.array([self.model.labels_groups[y] for y in all_y])
-        all_y_pred_groups = np.array([self.model.labels_groups[y] for y in all_y_pred])
-        h_acc = np.mean(all_y_groups == all_y_pred_groups)
-
-        logger.debug("Hierarchical Acc : %.4f\n" % h_acc)
-        return acc
-
-    accuracy.mode = "max"
-
-    @torch.no_grad()
-    def compute_predictions(self, soft=False):
-        """
-        :return: the true labels and the predicted labels
-        :rtype: 2-tuple of :py:class:`numpy.int32`
-        """
-        model, cls = (
-            (self.sampling_model, self.model)
-            if hasattr(self, "sampling_model")
-            else (self.model, None)
-        )
-        return compute_predictions(
-            model, self, classifier=cls, soft=soft, model_zl=self.model_zl
-        )
-
-    @torch.no_grad()
-    def unsupervised_classification_accuracy(self):
-        all_y, all_y_pred = self.compute_predictions()
-        uca = unsupervised_clustering_accuracy(all_y, all_y_pred)[0]
-        logger.debug("UCA : %.4f" % (uca))
-        return uca
-
-    unsupervised_classification_accuracy.mode = "max"
-
-    @torch.no_grad()
-    def nn_latentspace(self, posterior):
-        data_train, _, labels_train = self.get_latent()
-        data_test, _, labels_test = posterior.get_latent()
-        nn = KNeighborsClassifier()
-        nn.fit(data_train, labels_train)
-        score = nn.score(data_test, labels_test)
-        return score
-
-
 class ClassifierTrainer(Trainer):
     r"""The ClassifierInference class for training a classifier either on the raw data or on top of the latent
         space of another model (VAE, VAEC, SCANVI).
@@ -130,7 +65,8 @@ class ClassifierTrainer(Trainer):
             self.gene_dataset,
             train_size=train_size,
             test_size=test_size,
-            type_class=AnnotationPosterior,
+            # type_class=AnnotationPosterior,
+            type_class=Posterior,
         )
         self.train_set.to_monitor = ["accuracy"]
         self.test_set.to_monitor = ["accuracy"]
@@ -177,13 +113,13 @@ class ClassifierTrainer(Trainer):
             if hasattr(self, "sampling_model")
             else (self.model, None)
         )
-        full_set = self.create_posterior(type_class=AnnotationPosterior)
+        # full_set = self.create_posterior(type_class=AnnotationPosterior)
+        full_set = self.create_posterior(type_class=Posterior)
         return compute_predictions(
             model, full_set, classifier=cls, soft=soft, model_zl=self.sampling_zl
         )
 
 class JointSemiSupervisedTrainer(Trainer):
-# class SemiSupervisedTrainer(Trainer):
     r"""The SemiSupervisedTrainer class for the semi-supervised training of an autoencoder.
     This parent class can be inherited to specify the different training schemes for semi-supervised learning
     """
@@ -330,7 +266,8 @@ class JointSemiSupervisedTrainer(Trainer):
         gene_dataset=None,
         shuffle=False,
         indices=None,
-        type_class=AnnotationPosterior,
+        # type_class=AnnotationPosterior,
+        type_class=Posterior,
     ):
         return super().create_posterior(
             model, gene_dataset, shuffle, indices, type_class
