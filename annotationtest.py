@@ -19,7 +19,7 @@ parser.add_argument('-f', type=str, default='data_loom.loom', help='datafile to 
 parser.add_argument('-e', type=int, default=100, help='epoch to run (default: 100')
 parser.add_argument('-n', type=int, default=10, help='number of labelled cells for each label (default: 10')
 parser.add_argument('-p', type=str, default='y', help='plot figures(default: y')
-parser.add_argument('-t', type=int, default=1, help='test time(default: 1')
+parser.add_argument('-t', type=int, default=10, help='test time(default: 1')
 args = parser.parse_args()
 filename = args.f
 use_batches = False
@@ -69,7 +69,6 @@ for t in range(test_time):
         """ Figure"""
         accuracy_labelled_set = trainer.history["accuracy_labelled_set"]
         accuracy_unlabelled_set = trainer.history["accuracy_unlabelled_set"]
-        print(accuracy_labelled_set, accuracy_unlabelled_set)
         x = np.linspace(0, n_epochs, (len(accuracy_labelled_set)))
         plt.plot(x, accuracy_labelled_set, label="accuracy labelled")
         plt.plot(x, accuracy_unlabelled_set, label="accuracy unlabelled")
@@ -155,7 +154,6 @@ for t in range(test_time):
         sc.tl.umap(post_adata, min_dist=0.1)
         fig, ax = plt.subplots(figsize=(7, 6))
         sc.pl.umap(post_adata, color=["cell_type"], ax=ax, show=True, save='SCANVI_latent_space.png')
-
 
     print("\n## START: SVM")
     data_train, labels_train = trainer.labelled_set.raw_data()
