@@ -1379,7 +1379,7 @@ class Posterior:
     #                 )
     #             plt.legend()
     #         elif color_by == "batches and labels":
-    #             fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+    #             figures, axes = plt.subplots(1, 2, figsize=(14, 7))
     #             batch_indices = batch_indices.ravel()
     #             for i in range(n_batch):
     #                 axes[0].scatter(

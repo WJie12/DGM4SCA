@@ -119,6 +119,7 @@ class ClassifierTrainer(Trainer):
             model, full_set, classifier=cls, soft=soft, model_zl=self.sampling_zl
         )
 
+
 class JointSemiSupervisedTrainer(Trainer):
     r"""The SemiSupervisedTrainer class for the semi-supervised training of an autoencoder.
     This parent class can be inherited to specify the different training schemes for semi-supervised learning
