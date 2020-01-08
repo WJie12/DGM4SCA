@@ -139,7 +139,6 @@ class SCANVI(nn.Module):
     #         reconstruction_loss=reconstruction_loss,
     #     )
 
-
         self.n_labels = n_labels
         # Classifier takes n_latent as input
         cls_parameters = {
