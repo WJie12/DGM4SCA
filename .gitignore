@@ -112,5 +112,7 @@ ENV/
 .flooignore
 
 
-/data
+
 .vscode/settings.json
+/data/data_loom.loom
+/data/simulation_2.loom
