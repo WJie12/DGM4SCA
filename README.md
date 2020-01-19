@@ -1,6 +1,7 @@
 This repo is the final project for CS280. 
 This project implemented a semi-supervised learning extended generative model for single-cell cell type annotation.
-Compared with the SCANVI model, we adopted the idea of WAE which uses the W 
+
+Compared with the SCANVI model, we adopted the idea of WAE.
 The code structure is mainly inspired by [scvi](https://github.com/YosefLab/scVI)
 
 # How to run
