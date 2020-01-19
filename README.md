@@ -1,4 +1,4 @@
-This repo is the final project for CS280. 
+This repo is the final project for CS280: [Deep generative model for auto-annotation in single-cell analysis](https://wjie12.github.io/2020/01/19/DGM4SCA/). 
 This project implemented a semi-supervised learning extended generative model for single-cell cell type annotation.
 
 Compared with the SCANVI model, we adopted the idea of WAE.
